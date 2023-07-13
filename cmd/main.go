@@ -19,10 +19,10 @@ func main() {
 }
 
 type serverConfig struct {
-	isDev   bool   `envconfig:"dev" default:"false"`
-	host    string `envconfig:"host" default:"localhost:8080"`
-	port    int    `envconfig:"port" default:"8080"`
-	isHttps bool   `envconfig:"https" default:"true"`
+	IsDev   bool   `envconfig:"dev" default:"false"`
+	Host    string `envconfig:"host" default:"localhost:8080"`
+	Port    int    `envconfig:"port" default:"8080"`
+	IsHttps bool   `envconfig:"https" default:"true"`
 }
 
 func startServer() error {
@@ -30,7 +30,7 @@ func startServer() error {
 	if err := envconfig.Process(AppConfigPrefix, &cfg); err != nil {
 		return fmt.Errorf("server configuration error: %w", err)
 	}
-
+	fmt.Printf("%#v\n", cfg)
 	h := newHandler(&cfg)
 	app := fiber.New()
 	app.Use(logger.New(logger.Config{
@@ -47,19 +47,19 @@ func startServer() error {
 	app.Get("/@:username/inbox", h.getUserInbox)
 	app.Post("/@:username/inbox", h.postUserInbox)
 	app.Get("/@:username/outbox", h.getUserOutbox)
-	return app.Listen(fmt.Sprintf(":%d", cfg.port))
+	return app.Listen(fmt.Sprintf(":%d", cfg.Port))
 }
 
 func newHandler(cfg *serverConfig) *handler {
 	baseUrl := func() string {
 		scheme := "http"
-		if cfg.isHttps {
+		if cfg.IsHttps {
 			scheme = "https"
 		}
-		return fmt.Sprintf("%s://%s", scheme, cfg.host)
+		return fmt.Sprintf("%s://%s", scheme, cfg.Host)
 	}
 	return &handler{
-		host:    cfg.host,
+		host:    cfg.Host,
 		baseUrl: baseUrl(),
 	}
 }
@@ -164,6 +164,9 @@ func (h *handler) getUsername(c *fiber.Ctx) error {
 	publicKeyId := fmt.Sprintf("%s/#main-key", actorUrl)
 	userInbox := fmt.Sprintf("%s/@%s/inbox", prefix, username)
 	userOutbox := fmt.Sprintf("%s/@%s/outbox", prefix, username)
+	// "-----BEGIN RSA PRIVATE KEY-----\nMIIEpQIBAAKCAQEA51j2f9I+IRlMj/IKlkCoXfLHRl9/19B+rDQsvq61lE8qla1y\n+/UHtDfkmu42X3xTQDVAFrOilEBXHO4XfRcI6JXOPCwxRMNEDEzuDLbtdtaKAx78\nPplqSWanbYoRtSG8JNcOu+EKwfVAZ+mBMUsMliplaL1Vig8aLQzYetrCgBnztBDb\nd1pijqKDvrTZLmJKv9H+LFBoVJ0b0w+QqnuXArXfPf8PaVVQpWnRXRbiOz5Wh4w2\ntHDAGc80wAkNa9TQIZbsfClt6/aBbcO0L2wmTvfCMnEt1IbuNBTIMc0EBLM1KUfR\nRt3X+hIQ7fRCo+VjWuVFnDAgBDhnznaXu8vkrQIDAQABAoIBAQC62uL1qJUf3LQ3\nC1K7uuuCPiXv1BCI+lBlvBprxObKLAsEK7zUfjtDt2VAMajfBKalFJ13+I0W2sTB\njBiSozlBykVx2mvM0z4yBSy8Pj+cHXoJPUyVLwpm0K/oTH0y5FV3F/BBlWk/8Vuc\n0j/T1X8MBqAzscDWKo6E1nw+9lPkbAhQyYXoYmDc+2Y7UOBFg6s9SfXDk8PBsQbD\nR80szfP68f1WJhJVnN+YanMCAPw+Vt8YrMJVdM7pUkEl+w+KGZ/9DQsfs54t67p+\n1YRVq/80azRkOD3gyPM9ShxpQi4DiXoVJWOPAUYVL6umTddl1MtP6jxbbvB57lAu\n+K3LLwwNAoGBAPuKxPXvUdAteIabaOudOIM895J3zMPV6ZM2f4iU1tfdKxvGZBG6\nJxAsMz6Q+3iaosCOK9FGpGZmXZKk7em82cEOYb24FbyeKL+CNDF49kFzhdaGqBNJ\nHA0l651BsYYAKFF7NKNKAK7K0yg6S0iPNJ1nf4LY1YXgS05PRKl5H2ljAoGBAOty\nknM3VWPzBVLjC7kmOSGGTO83UvB7D4SWFsOQ0tP3qQInmfGobtqq/PnRaZwNzlrw\niBoqUkt7SezG+j7EGtj0GvbYUW7zu56N7MSo3nDgNix/5xkUPf5Hqao2jhFaK/ba\nWBpsSc2bYIHwrqHH/F+mXffbjaeRCL+JEQzBBd6vAoGAP973rj8LdiHlpcBWfuVY\nETLs5jsXOm7ZtXC0J3krqHpXVOEmTb4H5zph9LQZtoEFbIFtLOGUIxBBGFhatOwo\nGrZNKUBR/KfoTuB/4kQFu47a4CMnEGaTAd+sGS0yJ4Vot2/iaMgErl2AConqzczX\nHlTGcvIeHbVbSdIk7Cd+S2MCgYEApXiZGmZaGeuS40T0WURWxIvph/m+zYn/RvRg\nvUMMGLKm0f/Y/nCcsAuZzUzyxx0g2OLRFGqH+cqFEuZouzIBmFY+mRtAaBTd2Dnw\nm+n+ox/Akxe05/hE9W+R+zFqOSHBYjTj1HYkjF7VvZzUbpjpcqOuyOJBtPGGT25a\nUDdcE7sCgYEAm0fqc9HKvHaA86D3BRFWUV7PHP5JxURLPcCKaNVNOuQ923pjcP14\nbJJB9zQdKn0UPqKAzSnW3mfIXXT4vYoAvaktCNJi6QPFM51FQLXFZaCmmH8VL/ho\nptgSdpj4xVOGSdFdYKbwmziBn+NI31ie42G6VdBgRePbeHhZPs7uy6s=\n-----END RSA PRIVATE KEY-----\n"
+
+	pbulicKey := "-----BEGIN RSA PUBLIC KEY-----\nMIIBCgKCAQEA51j2f9I+IRlMj/IKlkCoXfLHRl9/19B+rDQsvq61lE8qla1y+/UH\ntDfkmu42X3xTQDVAFrOilEBXHO4XfRcI6JXOPCwxRMNEDEzuDLbtdtaKAx78Pplq\nSWanbYoRtSG8JNcOu+EKwfVAZ+mBMUsMliplaL1Vig8aLQzYetrCgBnztBDbd1pi\njqKDvrTZLmJKv9H+LFBoVJ0b0w+QqnuXArXfPf8PaVVQpWnRXRbiOz5Wh4w2tHDA\nGc80wAkNa9TQIZbsfClt6/aBbcO0L2wmTvfCMnEt1IbuNBTIMc0EBLM1KUfRRt3X\n+hIQ7fRCo+VjWuVFnDAgBDhnznaXu8vkrQIDAQAB\n-----END RSA PUBLIC KEY-----\n"
 	json := map[string]any{
 		"@context": []string{
 			"https://www.w3.org/ns/activitystreams",
@@ -178,7 +181,7 @@ func (h *handler) getUsername(c *fiber.Ctx) error {
 		"publicKey": map[string]any{
 			"id":           publicKeyId,
 			"owner":        actorUrl,
-			"publicKeyPem": "dummy",
+			"publicKeyPem": pbulicKey,
 		},
 	}
 	return c.JSON(json)
