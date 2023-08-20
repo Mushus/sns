@@ -15,6 +15,8 @@ const (
 	FieldFromID = "from_id"
 	// FieldToID holds the string denoting the toid field in the database.
 	FieldToID = "to_id"
+	// FieldStatus holds the string denoting the status field in the database.
+	FieldStatus = "status"
 	// Table holds the table name of the follow in the database.
 	Table = "follows"
 )
@@ -24,6 +26,7 @@ var Columns = []string{
 	FieldID,
 	FieldFromID,
 	FieldToID,
+	FieldStatus,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -35,6 +38,11 @@ func ValidColumn(column string) bool {
 	}
 	return false
 }
+
+var (
+	// DefaultStatus holds the default value on creation for the "status" field.
+	DefaultStatus int
+)
 
 // OrderOption defines the ordering options for the Follow queries.
 type OrderOption func(*sql.Selector)
@@ -52,4 +60,9 @@ func ByFromID(opts ...sql.OrderTermOption) OrderOption {
 // ByToID orders the results by the toID field.
 func ByToID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldToID, opts...).ToFunc()
+}
+
+// ByStatus orders the results by the status field.
+func ByStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStatus, opts...).ToFunc()
 }

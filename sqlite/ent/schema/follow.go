@@ -4,6 +4,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+	"github.com/Mushus/activitypub"
 )
 
 // Follow holds the schema definition for the Follow entity.
@@ -17,6 +18,7 @@ func (Follow) Fields() []ent.Field {
 		field.String("id").Immutable().Unique(),
 		field.String("fromID").Immutable(),
 		field.String("toID").Immutable(),
+		field.Int("status").Default(activitypub.FollowStatusFollowing.Value()),
 	}
 }
 
@@ -28,7 +30,6 @@ func (Follow) Edges() []ent.Edge {
 // Indexes of the Street.
 func (Follow) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("fromID"),
-		index.Fields("toID"),
+		index.Fields("fromID", "toID").Unique(),
 	}
 }

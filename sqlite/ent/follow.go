@@ -19,7 +19,9 @@ type Follow struct {
 	// FromID holds the value of the "fromID" field.
 	FromID string `json:"fromID,omitempty"`
 	// ToID holds the value of the "toID" field.
-	ToID         string `json:"toID,omitempty"`
+	ToID string `json:"toID,omitempty"`
+	// Status holds the value of the "status" field.
+	Status       int `json:"status,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -28,6 +30,8 @@ func (*Follow) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case follow.FieldStatus:
+			values[i] = new(sql.NullInt64)
 		case follow.FieldID, follow.FieldFromID, follow.FieldToID:
 			values[i] = new(sql.NullString)
 		default:
@@ -62,6 +66,12 @@ func (f *Follow) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field toID", values[i])
 			} else if value.Valid {
 				f.ToID = value.String
+			}
+		case follow.FieldStatus:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field status", values[i])
+			} else if value.Valid {
+				f.Status = int(value.Int64)
 			}
 		default:
 			f.selectValues.Set(columns[i], values[i])
@@ -104,6 +114,9 @@ func (f *Follow) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("toID=")
 	builder.WriteString(f.ToID)
+	builder.WriteString(", ")
+	builder.WriteString("status=")
+	builder.WriteString(fmt.Sprintf("%v", f.Status))
 	builder.WriteByte(')')
 	return builder.String()
 }

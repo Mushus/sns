@@ -72,6 +72,11 @@ func ToID(v string) predicate.Follow {
 	return predicate.Follow(sql.FieldEQ(FieldToID, v))
 }
 
+// Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
+func Status(v int) predicate.Follow {
+	return predicate.Follow(sql.FieldEQ(FieldStatus, v))
+}
+
 // FromIDEQ applies the EQ predicate on the "fromID" field.
 func FromIDEQ(v string) predicate.Follow {
 	return predicate.Follow(sql.FieldEQ(FieldFromID, v))
@@ -200,6 +205,46 @@ func ToIDEqualFold(v string) predicate.Follow {
 // ToIDContainsFold applies the ContainsFold predicate on the "toID" field.
 func ToIDContainsFold(v string) predicate.Follow {
 	return predicate.Follow(sql.FieldContainsFold(FieldToID, v))
+}
+
+// StatusEQ applies the EQ predicate on the "status" field.
+func StatusEQ(v int) predicate.Follow {
+	return predicate.Follow(sql.FieldEQ(FieldStatus, v))
+}
+
+// StatusNEQ applies the NEQ predicate on the "status" field.
+func StatusNEQ(v int) predicate.Follow {
+	return predicate.Follow(sql.FieldNEQ(FieldStatus, v))
+}
+
+// StatusIn applies the In predicate on the "status" field.
+func StatusIn(vs ...int) predicate.Follow {
+	return predicate.Follow(sql.FieldIn(FieldStatus, vs...))
+}
+
+// StatusNotIn applies the NotIn predicate on the "status" field.
+func StatusNotIn(vs ...int) predicate.Follow {
+	return predicate.Follow(sql.FieldNotIn(FieldStatus, vs...))
+}
+
+// StatusGT applies the GT predicate on the "status" field.
+func StatusGT(v int) predicate.Follow {
+	return predicate.Follow(sql.FieldGT(FieldStatus, v))
+}
+
+// StatusGTE applies the GTE predicate on the "status" field.
+func StatusGTE(v int) predicate.Follow {
+	return predicate.Follow(sql.FieldGTE(FieldStatus, v))
+}
+
+// StatusLT applies the LT predicate on the "status" field.
+func StatusLT(v int) predicate.Follow {
+	return predicate.Follow(sql.FieldLT(FieldStatus, v))
+}
+
+// StatusLTE applies the LTE predicate on the "status" field.
+func StatusLTE(v int) predicate.Follow {
+	return predicate.Follow(sql.FieldLTE(FieldStatus, v))
 }
 
 // And groups predicates with the AND operator between them.

@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/Mushus/activitypub/internal"
 	"github.com/Mushus/activitypub/lib/crypt"
 	"github.com/go-fed/httpsig"
 )
@@ -31,7 +30,7 @@ func NewRemoteServer(cfg *Config, urlResolver *URLResolver) *RemoteServer {
 	}
 }
 
-func (s *RemoteServer) GetMainKey(c context.Context, mainKeyID string) (*internal.JSONPublicKey, error) {
+func (s *RemoteServer) GetMainKey(c context.Context, mainKeyID string) (*JSONPublicKey, error) {
 	res, err := s.cli.Get(mainKeyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get main key: %w", err)
@@ -46,7 +45,7 @@ func (s *RemoteServer) GetMainKey(c context.Context, mainKeyID string) (*interna
 		return nil, fmt.Errorf("failed to get main key: status code %d", res.StatusCode)
 	}
 
-	var mainKey internal.JSONPublicKey
+	var mainKey JSONPublicKey
 	if err := json.NewDecoder(res.Body).Decode(&mainKey); err != nil {
 		return nil, fmt.Errorf("failed to decode main key: %w", err)
 	}
@@ -54,7 +53,7 @@ func (s *RemoteServer) GetMainKey(c context.Context, mainKeyID string) (*interna
 	return &mainKey, nil
 }
 
-func (s *RemoteServer) GetWebfinger(c context.Context, host string, resource string) (*internal.JSONWebfinger, error) {
+func (s *RemoteServer) GetWebfinger(c context.Context, host string, resource string) (*JSONWebfinger, error) {
 	uri := url.URL{
 		Scheme: "https",
 		Host:   host,
@@ -77,7 +76,7 @@ func (s *RemoteServer) GetWebfinger(c context.Context, host string, resource str
 		return nil, fmt.Errorf("failed to get webfinger: status code %d", res.StatusCode)
 	}
 
-	var webfinger internal.JSONWebfinger
+	var webfinger JSONWebfinger
 	if err := json.NewDecoder(res.Body).Decode(&webfinger); err != nil {
 		return nil, fmt.Errorf("failed to decode webfinger: %w", err)
 	}
@@ -85,7 +84,7 @@ func (s *RemoteServer) GetWebfinger(c context.Context, host string, resource str
 	return &webfinger, nil
 }
 
-func (s *RemoteServer) GetActor(c context.Context, account *Account, actorID string) (*internal.JSONActor, error) {
+func (s *RemoteServer) GetActor(c context.Context, account *Account, actorID string) (*JSONActor, error) {
 	req, err := http.NewRequestWithContext(c, http.MethodGet, actorID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -107,7 +106,7 @@ func (s *RemoteServer) GetActor(c context.Context, account *Account, actorID str
 		return nil, fmt.Errorf("failed to get actor: status code %d", res.StatusCode)
 	}
 
-	var actor internal.JSONActor
+	var actor JSONActor
 	if err := json.NewDecoder(res.Body).Decode(&actor); err != nil {
 		return nil, fmt.Errorf("failed to decode actor: %w", err)
 	}
@@ -115,7 +114,7 @@ func (s *RemoteServer) GetActor(c context.Context, account *Account, actorID str
 	return &actor, nil
 }
 
-func (s *RemoteServer) GetInbox(c context.Context, account *Account, inboxURL string) (*internal.JSONOrderedCollection, error) {
+func (s *RemoteServer) GetInbox(c context.Context, account *Account, inboxURL string) (*JSONOrderedCollection, error) {
 	req, err := http.NewRequestWithContext(c, http.MethodGet, inboxURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -135,7 +134,7 @@ func (s *RemoteServer) GetInbox(c context.Context, account *Account, inboxURL st
 		return nil, fmt.Errorf("failed to get inbox: status code %d", res.StatusCode)
 	}
 
-	var inbox internal.JSONOrderedCollection
+	var inbox JSONOrderedCollection
 	if err := json.NewDecoder(res.Body).Decode(&inbox); err != nil {
 		return nil, fmt.Errorf("failed to decode inbox: %w", err)
 	}
@@ -158,7 +157,7 @@ func (s *RemoteServer) PostInbox(c context.Context, account *Account, inboxURL s
 
 	res, err := s.PostSecureRequest(account, req, body)
 	if err != nil {
-		return fmt.Errorf("failed to post inbox: %w", err)
+		return fmt.Errorf("failed to request inbox: %w", err)
 	}
 
 	defer func() {
@@ -166,8 +165,8 @@ func (s *RemoteServer) PostInbox(c context.Context, account *Account, inboxURL s
 		res.Body.Close()
 	}()
 
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to post inbox: status code %d", res.StatusCode)
+	if res.StatusCode < 200 && 300 <= res.StatusCode {
+		return fmt.Errorf("status code is %d", res.StatusCode)
 	}
 
 	return nil

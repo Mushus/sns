@@ -530,6 +530,8 @@ type FollowMutation struct {
 	id            *string
 	fromID        *string
 	toID          *string
+	status        *int
+	addstatus     *int
 	clearedFields map[string]struct{}
 	done          bool
 	oldValue      func(context.Context) (*Follow, error)
@@ -712,6 +714,62 @@ func (m *FollowMutation) ResetToID() {
 	m.toID = nil
 }
 
+// SetStatus sets the "status" field.
+func (m *FollowMutation) SetStatus(i int) {
+	m.status = &i
+	m.addstatus = nil
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *FollowMutation) Status() (r int, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the Follow entity.
+// If the Follow object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *FollowMutation) OldStatus(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// AddStatus adds i to the "status" field.
+func (m *FollowMutation) AddStatus(i int) {
+	if m.addstatus != nil {
+		*m.addstatus += i
+	} else {
+		m.addstatus = &i
+	}
+}
+
+// AddedStatus returns the value that was added to the "status" field in this mutation.
+func (m *FollowMutation) AddedStatus() (r int, exists bool) {
+	v := m.addstatus
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *FollowMutation) ResetStatus() {
+	m.status = nil
+	m.addstatus = nil
+}
+
 // Where appends a list predicates to the FollowMutation builder.
 func (m *FollowMutation) Where(ps ...predicate.Follow) {
 	m.predicates = append(m.predicates, ps...)
@@ -746,12 +804,15 @@ func (m *FollowMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *FollowMutation) Fields() []string {
-	fields := make([]string, 0, 2)
+	fields := make([]string, 0, 3)
 	if m.fromID != nil {
 		fields = append(fields, follow.FieldFromID)
 	}
 	if m.toID != nil {
 		fields = append(fields, follow.FieldToID)
+	}
+	if m.status != nil {
+		fields = append(fields, follow.FieldStatus)
 	}
 	return fields
 }
@@ -765,6 +826,8 @@ func (m *FollowMutation) Field(name string) (ent.Value, bool) {
 		return m.FromID()
 	case follow.FieldToID:
 		return m.ToID()
+	case follow.FieldStatus:
+		return m.Status()
 	}
 	return nil, false
 }
@@ -778,6 +841,8 @@ func (m *FollowMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldFromID(ctx)
 	case follow.FieldToID:
 		return m.OldToID(ctx)
+	case follow.FieldStatus:
+		return m.OldStatus(ctx)
 	}
 	return nil, fmt.Errorf("unknown Follow field %s", name)
 }
@@ -801,6 +866,13 @@ func (m *FollowMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetToID(v)
 		return nil
+	case follow.FieldStatus:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Follow field %s", name)
 }
@@ -808,13 +880,21 @@ func (m *FollowMutation) SetField(name string, value ent.Value) error {
 // AddedFields returns all numeric fields that were incremented/decremented during
 // this mutation.
 func (m *FollowMutation) AddedFields() []string {
-	return nil
+	var fields []string
+	if m.addstatus != nil {
+		fields = append(fields, follow.FieldStatus)
+	}
+	return fields
 }
 
 // AddedField returns the numeric value that was incremented/decremented on a field
 // with the given name. The second boolean return value indicates that this field
 // was not set, or was not defined in the schema.
 func (m *FollowMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case follow.FieldStatus:
+		return m.AddedStatus()
+	}
 	return nil, false
 }
 
@@ -823,6 +903,13 @@ func (m *FollowMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *FollowMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case follow.FieldStatus:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddStatus(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Follow numeric field %s", name)
 }
@@ -855,6 +942,9 @@ func (m *FollowMutation) ResetField(name string) error {
 		return nil
 	case follow.FieldToID:
 		m.ResetToID()
+		return nil
+	case follow.FieldStatus:
+		m.ResetStatus()
 		return nil
 	}
 	return fmt.Errorf("unknown Follow field %s", name)

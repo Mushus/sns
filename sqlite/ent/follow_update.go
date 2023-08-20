@@ -27,6 +27,27 @@ func (fu *FollowUpdate) Where(ps ...predicate.Follow) *FollowUpdate {
 	return fu
 }
 
+// SetStatus sets the "status" field.
+func (fu *FollowUpdate) SetStatus(i int) *FollowUpdate {
+	fu.mutation.ResetStatus()
+	fu.mutation.SetStatus(i)
+	return fu
+}
+
+// SetNillableStatus sets the "status" field if the given value is not nil.
+func (fu *FollowUpdate) SetNillableStatus(i *int) *FollowUpdate {
+	if i != nil {
+		fu.SetStatus(*i)
+	}
+	return fu
+}
+
+// AddStatus adds i to the "status" field.
+func (fu *FollowUpdate) AddStatus(i int) *FollowUpdate {
+	fu.mutation.AddStatus(i)
+	return fu
+}
+
 // Mutation returns the FollowMutation object of the builder.
 func (fu *FollowUpdate) Mutation() *FollowMutation {
 	return fu.mutation
@@ -68,6 +89,12 @@ func (fu *FollowUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			}
 		}
 	}
+	if value, ok := fu.mutation.Status(); ok {
+		_spec.SetField(follow.FieldStatus, field.TypeInt, value)
+	}
+	if value, ok := fu.mutation.AddedStatus(); ok {
+		_spec.AddField(follow.FieldStatus, field.TypeInt, value)
+	}
 	if n, err = sqlgraph.UpdateNodes(ctx, fu.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{follow.Label}
@@ -86,6 +113,27 @@ type FollowUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *FollowMutation
+}
+
+// SetStatus sets the "status" field.
+func (fuo *FollowUpdateOne) SetStatus(i int) *FollowUpdateOne {
+	fuo.mutation.ResetStatus()
+	fuo.mutation.SetStatus(i)
+	return fuo
+}
+
+// SetNillableStatus sets the "status" field if the given value is not nil.
+func (fuo *FollowUpdateOne) SetNillableStatus(i *int) *FollowUpdateOne {
+	if i != nil {
+		fuo.SetStatus(*i)
+	}
+	return fuo
+}
+
+// AddStatus adds i to the "status" field.
+func (fuo *FollowUpdateOne) AddStatus(i int) *FollowUpdateOne {
+	fuo.mutation.AddStatus(i)
+	return fuo
 }
 
 // Mutation returns the FollowMutation object of the builder.
@@ -158,6 +206,12 @@ func (fuo *FollowUpdateOne) sqlSave(ctx context.Context) (_node *Follow, err err
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := fuo.mutation.Status(); ok {
+		_spec.SetField(follow.FieldStatus, field.TypeInt, value)
+	}
+	if value, ok := fuo.mutation.AddedStatus(); ok {
+		_spec.AddField(follow.FieldStatus, field.TypeInt, value)
 	}
 	_node = &Follow{config: fuo.config}
 	_spec.Assign = _node.assignValues

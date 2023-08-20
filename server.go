@@ -12,15 +12,30 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Mushus/activitypub/internal"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/ironstar-io/chizerolog"
 	"github.com/rs/zerolog"
 )
 
-const InternalServerError = "internal server error"
+const resNotFound = "not found"
+const resBadRequestError = "bad request"
+const resInternalServerError = "internal server error"
 const sessionKey = "session_id"
+const headerContentType = "Content-Type"
+const mimeXRDXML = "application/xrd+xml"
+const mimeActivityJSON = "application/activity+json"
+const mimeJRDJSON = "application/jrd+json"
+const mimeJSON = "application/json"
+const mimeHtml = "text/html"
+
+// functions
+
+func sendAsJSON(w http.ResponseWriter, status int, mime string, body any) {
+	w.Header().Set(headerContentType, mime)
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(body)
+}
 
 // interface
 
@@ -113,18 +128,18 @@ func (h *Handler) handleWellKnownHostMetaGet(w http.ResponseWriter, r *http.Requ
 	enc := xml.NewEncoder(w)
 	enc.Indent("", "  ")
 
-	w.Header().Set("Content-Type", "application/xrd+xml")
+	w.Header().Set(headerContentType, mimeXRDXML)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(xml.Header))
-	enc.Encode(internal.XMLHostMeta{
+	enc.Encode(XMLHostMeta{
 		XMLName: xml.Name{
 			Local: "XRD",
 		},
 		Xmlns: "http://docs.oasis-open.org/ns/xri/xrd-1.0",
-		Links: []internal.XMLHostMetaLink{
+		Links: []XMLHostMetaLink{
 			{
 				Rel:  "lrdd",
-				Type: "application/xrd+xml",
+				Type: mimeXRDXML,
 				Template: fmt.Sprintf("%s/.well-known/webfinger?resource={uri}",
 					h.urlResolver.myURLPrefix()),
 			},
@@ -134,107 +149,90 @@ func (h *Handler) handleWellKnownHostMetaGet(w http.ResponseWriter, r *http.Requ
 
 // GET /.well-known/nodeinfo
 func (h *Handler) handleWellKnownNodeInfoGet(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(internal.JSONNodeInfo{
-		Links: []internal.JSONNodeInfoLink{
+	body := JSONNodeInfo{
+		Links: []JSONNodeInfoLink{
 			{
 				Rel:  "http://nodeinfo.diaspora.software/ns/schema/2.1",
 				Href: fmt.Sprintf("%s/nodeinfo/2.1", h.urlResolver.myURLPrefix()),
 			},
 		},
-	})
+	}
+	sendAsJSON(w, http.StatusOK, mimeJSON, body)
 }
 
 // GET /nodeinfo/2.1
 func (h *Handler) handleNodeInfo2Dot1Get(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(internal.JSONNodeInfo2Dot1{
+	body := JSONNodeInfo2Dot1{
 		Version: "2.1",
-		Software: internal.JSONNodeInfo2Dot1Software{
+		Software: JSONNodeInfo2Dot1Software{
 			Name:    "activitypub",
 			Version: "0.0.1",
 		},
 		Protocols: []string{
 			"activitypub",
 		},
-		Services: internal.JSONNodeInfo2Dot1Services{
+		Services: JSONNodeInfo2Dot1Services{
 			Inbound:  []string{},
 			Outbound: []string{},
 		},
 		OpenRegistrations: false,
-		Usage:             internal.JSONNodeInfo2Dot1Usage{},
-		Metadata:          internal.JSONNodeInfo2Dot1Metadata{},
-	})
+		Usage:             JSONNodeInfo2Dot1Usage{},
+		Metadata:          JSONNodeInfo2Dot1Metadata{},
+	}
+	sendAsJSON(w, http.StatusOK, mimeJSON, body)
 }
 
 // Get /.well-known/webfinger
 func (h *Handler) handleWellKnownWebfingerGet(w http.ResponseWriter, r *http.Request) {
 	resource := r.URL.Query().Get("resource")
 
-	actor, err := h.processor.Webfinger(r.Context(), resource)
+	webfinger, err := h.processor.Webfinger(r.Context(), resource)
 	if err != nil {
 		h.catchError(w, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/jrd+json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(internal.JSONWebfinger{
-		Subject: resource,
-		Links: []internal.JSONWebfingerLink{
-			{
-				Rel:  "self",
-				Type: "application/activity+json",
-				Href: actor.ID,
-			},
-		},
-	})
+	sendAsJSON(w, http.StatusOK, mimeJRDJSON, webfinger)
 }
 
 // GET /u/{userID}
 func (h *Handler) handleUGet(w http.ResponseWriter, r *http.Request) {
 	accountID := chi.URLParam(r, "accountID")
 	if accountID == "" {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, resBadRequestError, http.StatusBadRequest)
 		return
 	}
 
 	actor, err := h.processor.GetLocalAccount(r.Context(), accountID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			http.Error(w, "not found", http.StatusNotFound)
+			http.Error(w, resNotFound, http.StatusNotFound)
 			return
 		}
 		h.catchError(w, err)
 	}
 
-	w.Header().Set("Content-Type", "application/activity+json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(actor)
+	sendAsJSON(w, http.StatusOK, mimeActivityJSON, actor)
 }
 
 // Get /u/{userID}/main-key
 func (h *Handler) handleUserMainKeyGet(w http.ResponseWriter, r *http.Request) {
 	accountID := chi.URLParam(r, "accountID")
 	if accountID == "" {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, resBadRequestError, http.StatusBadRequest)
 		return
 	}
 
 	mainKey, err := h.processor.GetMainKey(r.Context(), accountID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			http.Error(w, "not found", http.StatusNotFound)
+			http.Error(w, resNotFound, http.StatusNotFound)
 			return
 		}
 		h.catchError(w, err)
 	}
 
-	w.Header().Set("Content-Type", "application/activity+json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(mainKey)
+	sendAsJSON(w, http.StatusOK, mimeActivityJSON, mainKey)
 }
 
 func (h *Handler) handleUserInboxGet(w http.ResponseWriter, r *http.Request) {
@@ -244,7 +242,7 @@ func (h *Handler) handleUserInboxPost(w http.ResponseWriter, r *http.Request) {
 	c := r.Context()
 	accountID := chi.URLParam(r, "accountID")
 	if accountID == "" {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, resBadRequestError, http.StatusBadRequest)
 		return
 	}
 
@@ -254,7 +252,7 @@ func (h *Handler) handleUserInboxPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/activity+json")
+	w.Header().Set(headerContentType, mimeActivityJSON)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -262,7 +260,7 @@ func (h *Handler) handleUserOutboxPost(w http.ResponseWriter, r *http.Request) {
 	c := r.Context()
 	accountID := chi.URLParam(r, "accountID")
 	if accountID == "" {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, resBadRequestError, http.StatusBadRequest)
 		return
 	}
 
@@ -272,7 +270,7 @@ func (h *Handler) handleUserOutboxPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/activity+json")
+	w.Header().Set(headerContentType, mimeActivityJSON)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -281,7 +279,7 @@ func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
 	c := r.Context()
 	_, ok := h.sess.Get(c, sessionKey).(string)
 	if !ok {
-		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set(headerContentType, mimeHtml)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`
 			<ul>
@@ -292,7 +290,7 @@ func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set(headerContentType, mimeHtml)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`
 		<ul>
@@ -306,7 +304,7 @@ func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 // GET /login
 func (h *Handler) handleLoginGet(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set(headerContentType, mimeHtml)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`
 		<form method="POST">
@@ -342,7 +340,7 @@ func (h *Handler) handleLogoutPost(w http.ResponseWriter, r *http.Request) {
 
 // GET /signup
 func (h *Handler) handleSignupGet(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set(headerContentType, mimeHtml)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`
 		<form method="POST">
@@ -390,12 +388,16 @@ func (h *Handler) handleUserGet(w http.ResponseWriter, r *http.Request) {
 		{{if .isFollow}}<p>フォロー中</p>{{end}}
 		{{if .isFollower}}<p>フォロワー</p>{{end}}
 		{{if .isFollow}}
-		<form method="post" action="/@{{.acct}}/follow">
-			<button type="submit">フォロー</button>
+		<form method="post" action="/@{{.acct}}/unfollow">
+			<button type="submit">フォロー解除</button>
+		</form>
+		{{else if .isPending}}
+		<form method="post" action="/@{{.acct}}/unfollow">
+			<button type="submit">フォロー申請取り消し</button>
 		</form>
 		{{else}}
-		<form method="post" action="/@{{.acct}}/unfollow">
-			<button type="submit">解除フォロー</button>
+		<form method="post" action="/@{{.acct}}/follow">
+			<button type="submit">フォロー</button>
 		</form>
 		{{end}}
 		<p>{{.bio}}</p>
@@ -406,13 +408,14 @@ func (h *Handler) handleUserGet(w http.ResponseWriter, r *http.Request) {
 		</ul>
 	`)
 
-	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set(headerContentType, mimeHtml)
 	w.WriteHeader(http.StatusOK)
 	tmpl.Execute(w, map[string]interface{}{
 		"acct":       acct,
 		"username":   user.Actor.Username,
-		"isFollow":   user.IsFollow,
-		"isFollower": user.IsFollower,
+		"isFollow":   user.ToFollow == FollowStatusFollowing,
+		"isFollower": user.FromFollow == FollowStatusFollowing,
+		"isPending":  user.ToFollow == FollowStatusPending,
 	})
 }
 
@@ -456,7 +459,7 @@ func (h *Handler) handleUserUnfollowPost(w http.ResponseWriter, r *http.Request)
 
 func (h *Handler) catchError(w http.ResponseWriter, err error) {
 	h.log.Error().Err(err).Send()
-	http.Error(w, InternalServerError, http.StatusInternalServerError)
+	http.Error(w, resInternalServerError, http.StatusInternalServerError)
 }
 
 // urlResolver
@@ -501,7 +504,7 @@ func (u *URLResolver) resolveActivityURL(activityID string) string {
 	return fmt.Sprintf("%s/a/%s", u.myURLPrefix(), activityID)
 }
 
-func (u *URLResolver) getProfileURL(username string, host string) string {
+func (u *URLResolver) resolveProfileURL(username string, host string) string {
 	if host == "" || host == u.host {
 		return fmt.Sprintf("%s/@%s", u.myURLPrefix(), username)
 	}

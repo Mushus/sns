@@ -118,11 +118,27 @@ func NewFollowDB(db *SQLite) activitypub.FollowStore {
 	return &FollowDB{SQLite: db}
 }
 
+func (d *FollowDB) RequestFollow(c context.Context, fromID string, toID string) error {
+	err := d.cli.Follow.Create().
+		SetID(activitypub.GenerateSortableID()).
+		SetFromID(fromID).
+		SetToID(toID).
+		SetStatus(followStatusPending.toValue()).
+		OnConflict().
+		UpdateNewValues().
+		Exec(c)
+	if err != nil {
+		return fmt.Errorf("failed to create follow: %w", errors.WithStack(err))
+	}
+	return nil
+}
+
 func (d *FollowDB) Follow(c context.Context, fromID string, toID string) error {
 	err := d.cli.Follow.Create().
 		SetID(activitypub.GenerateSortableID()).
 		SetFromID(fromID).
 		SetToID(toID).
+		SetStatus(followStatusFollowing.toValue()).
 		OnConflict().
 		UpdateNewValues().
 		Exec(c)
@@ -142,22 +158,28 @@ func (d *FollowDB) Unfollow(c context.Context, fromID string, toID string) error
 	return nil
 }
 
-func (d *FollowDB) IsFollowing(c context.Context, fromID string, toID string) (bool, error) {
-	_, err := d.cli.Follow.Query().
-		Where(follow.FromID(fromID), follow.ToID(toID)).
+func (d *FollowDB) FindFollowStatus(c context.Context, fromID string, toID string) (activitypub.FollowStatus, error) {
+	status, err := d.cli.Follow.Query().
+		Where(
+			follow.FromID(fromID),
+			follow.ToID(toID),
+		).
 		First(c)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			return false, nil
+			return activitypub.FollowStatusUnfollowing, nil
 		}
-		return false, fmt.Errorf("failed to get follow: %w", errors.WithStack(err))
+		return activitypub.FollowStatusUnknown, fmt.Errorf("failed to get follow: %w", errors.WithStack(err))
 	}
-	return true, nil
+	return activitypub.FindFollowStatus(status.Status), nil
 }
 
 func (d *FollowDB) ListFollowers(c context.Context, id string) ([]string, error) {
 	followers, err := d.cli.Follow.Query().
-		Where(follow.ToID(id)).
+		Where(
+			follow.ToID(id),
+			follow.Status(followStatusFollowing.toValue()),
+		).
 		All(c)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get follows: %w", errors.WithStack(err))
@@ -169,7 +191,10 @@ func (d *FollowDB) ListFollowers(c context.Context, id string) ([]string, error)
 
 func (d *FollowDB) ListFollows(c context.Context, id string) ([]string, error) {
 	follows, err := d.cli.Follow.Query().
-		Where(follow.FromID(id)).
+		Where(
+			follow.FromID(id),
+			follow.Status(followStatusFollowing.toValue()),
+		).
 		All(c)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get follows: %w", errors.WithStack(err))
@@ -178,6 +203,46 @@ func (d *FollowDB) ListFollows(c context.Context, id string) ([]string, error) {
 		return follow.ToID
 	}), nil
 }
+
+// avtivity
+
+// type ActivityDB struct {
+// 	*SQLite
+// }
+
+// func NewActivityDB(db *SQLite) activitypub.ActivityStore {
+// 	return &ActivityDB{SQLite: db}
+// }
+
+// func (d *ActivityDB) Save(c context.Context, activity *activitypub.Activity) error {
+// 	d.cli.Activity.Create().
+// 		SetID(activity.ID).
+// 		SetActivityID(activity.ActivityID).
+// 		SetJSON(activity.JSON).
+// 		Exec(c)
+// 	return nil
+// }
+
+// func (d *ActivityDB) Find(c context.Context, id string) (*activitypub.Activity, error) {
+// 	act, err := d.cli.Activity.Query().
+// 		Where(activity.ID(id)).
+// 		First(c)
+// 	if err != nil {
+// 		if ent.IsNotFound(err) {
+// 			return nil, activitypub.ErrNotFound
+// 		}
+// 		return nil, fmt.Errorf("failed to get activity: %w", errors.WithStack(err))
+// 	}
+// 	return toActivity(act)
+// }
+
+// func toActivity(act *ent.Activity) (*activitypub.Activity, error) {
+// 	return &activitypub.Activity{
+// 		ID:         act.ID,
+// 		ActivityID: act.ActivityID,
+// 		JSON:       act.JSON,
+// 	}, nil
+// }
 
 // session
 

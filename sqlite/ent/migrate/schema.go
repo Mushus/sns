@@ -27,6 +27,7 @@ var (
 		{Name: "id", Type: field.TypeString, Unique: true},
 		{Name: "from_id", Type: field.TypeString},
 		{Name: "to_id", Type: field.TypeString},
+		{Name: "status", Type: field.TypeInt, Default: 1},
 	}
 	// FollowsTable holds the schema information for the "follows" table.
 	FollowsTable = &schema.Table{
@@ -35,14 +36,9 @@ var (
 		PrimaryKey: []*schema.Column{FollowsColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "follow_from_id",
-				Unique:  false,
-				Columns: []*schema.Column{FollowsColumns[1]},
-			},
-			{
-				Name:    "follow_to_id",
-				Unique:  false,
-				Columns: []*schema.Column{FollowsColumns[2]},
+				Name:    "follow_from_id_to_id",
+				Unique:  true,
+				Columns: []*schema.Column{FollowsColumns[1], FollowsColumns[2]},
 			},
 		},
 	}

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/Mushus/activitypub/internal"
 	"github.com/Mushus/activitypub/lib/crypt"
 	"github.com/rs/zerolog"
 	"golang.org/x/crypto/bcrypt"
@@ -40,7 +39,7 @@ func NewProcessor(
 	}
 }
 
-func (p *Processor) Webfinger(c context.Context, resource string) (*Account, error) {
+func (p *Processor) Webfinger(c context.Context, resource string) (*JSONWebfinger, error) {
 	acct, err := parseAcctScheme(resource)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse acct: %w", err)
@@ -53,7 +52,22 @@ func (p *Processor) Webfinger(c context.Context, resource string) (*Account, err
 		return nil, ErrNotFound
 	}
 
-	return p.accountStore.FindByUsername(c, name)
+	account, err := p.accountStore.FindByUsername(c, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find account: %w", err)
+	}
+
+	href := p.urlResolver.resolveActorURL(account.ID)
+	return &JSONWebfinger{
+		Subject: resource,
+		Links: []JSONWebfingerLink{
+			{
+				Rel:  "self",
+				Type: "application/activity+json",
+				Href: href,
+			},
+		},
+	}, nil
 }
 
 type LocalAccountResult struct {
@@ -61,7 +75,7 @@ type LocalAccountResult struct {
 	Actor   *Actor
 }
 
-func (p *Processor) GetMainKey(c context.Context, accountID string) (*internal.JSONMainKey, error) {
+func (p *Processor) GetMainKey(c context.Context, accountID string) (*JSONMainKey, error) {
 	account, err := p.accountStore.Find(c, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find account: %w", err)
@@ -75,12 +89,12 @@ func (p *Processor) GetMainKey(c context.Context, accountID string) (*internal.J
 	actorURL := p.urlResolver.resolveActorURL(account.ID)
 	publicKeyURL := p.urlResolver.resolveMainKeyURL(account.ID)
 
-	return &internal.JSONMainKey{
+	return &JSONMainKey{
 		Context:           json.RawMessage(`["https://www.w3.org/ns/activitystreams","https://w3id.org/security/v1"]`),
 		ID:                actorURL,
 		Type:              "Person",
 		PreferredUsername: account.Username,
-		PublicKey: internal.JSONPublicKey{
+		PublicKey: JSONPublicKey{
 			ID:           publicKeyURL,
 			Owner:        actorURL,
 			PublicKeyPem: publicKey,
@@ -88,7 +102,7 @@ func (p *Processor) GetMainKey(c context.Context, accountID string) (*internal.J
 	}, nil
 }
 
-func (p *Processor) GetLocalAccount(c context.Context, accountID string) (*internal.JSONActor, error) {
+func (p *Processor) GetLocalAccount(c context.Context, accountID string) (*JSONActor, error) {
 	account, err := p.accountStore.Find(c, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find account: %w", err)
@@ -104,7 +118,7 @@ func (p *Processor) GetLocalAccount(c context.Context, accountID string) (*inter
 	inbox := p.urlResolver.resolveInboxURL(account.ID)
 	outbox := p.urlResolver.resolveOutboxURL(account.ID)
 
-	return &internal.JSONActor{
+	return &JSONActor{
 		Context:           json.RawMessage(`["https://www.w3.org/ns/activitystreams","https://w3id.org/security/v1"]`),
 		ID:                actorURL,
 		Type:              "Person",
@@ -112,7 +126,7 @@ func (p *Processor) GetLocalAccount(c context.Context, accountID string) (*inter
 		Name:              account.Username,
 		PreferredUsername: account.Username,
 		URL:               actorURL,
-		PublicKey: internal.JSONPublicKey{
+		PublicKey: JSONPublicKey{
 			ID:           publicKeyURL,
 			Owner:        actorURL,
 			PublicKeyPem: publicKey,
@@ -124,8 +138,8 @@ func (p *Processor) GetLocalAccount(c context.Context, accountID string) (*inter
 
 type ViewResult struct {
 	Actor      *Actor
-	IsFollow   bool
-	IsFollower bool
+	ToFollow   FollowStatus
+	FromFollow FollowStatus
 }
 
 // View - アクターの状態を表示する
@@ -142,29 +156,26 @@ func (p *Processor) View(c context.Context, accountID string, acctStr string) (*
 		return nil, fmt.Errorf("failed to parse acct: %w", err)
 	}
 
-	var isFollow bool
-	var isFollower bool
-
 	actor, err := p.findActor(c, account, acct)
 	if err != nil {
 		return nil, err
 	}
 
 	fromID := p.urlResolver.resolveActorURL(accountID)
-	isFollow, err = p.followStore.IsFollowing(c, fromID, actor.ID)
+	fromFollow, err := p.followStore.FindFollowStatus(c, fromID, actor.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check following: %w", err)
 	}
 
-	isFollower, err = p.followStore.IsFollowing(c, actor.ID, fromID)
+	toFollow, err := p.followStore.FindFollowStatus(c, actor.ID, fromID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check follower: %w", err)
 	}
 
 	return &ViewResult{
 		Actor:      actor,
-		IsFollow:   isFollow,
-		IsFollower: isFollower,
+		ToFollow:   fromFollow,
+		FromFollow: toFollow,
 	}, nil
 }
 
@@ -225,7 +236,7 @@ func (p *Processor) ReceiveInbox(c context.Context, accountID string, postReader
 		return fmt.Errorf("failed to read post: %w", err)
 	}
 
-	var activity internal.JSONActivityType
+	var activity JSONActivityType
 	err = json.Unmarshal(post, &activity)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal activity: %w", err)
@@ -233,46 +244,23 @@ func (p *Processor) ReceiveInbox(c context.Context, accountID string, postReader
 
 	switch activity.Type {
 	case "Follow":
-		return p.receiveFollow(c, account, post)
-	default:
-		return fmt.Errorf("unsupported activity type: %s", activity.Type)
-	}
-}
-
-func (p *Processor) ReceiveOutbox(c context.Context, accountID string, postReader io.Reader) error {
-	account, err := p.accountStore.Find(c, accountID)
-	if err != nil {
-		return fmt.Errorf("failed to find actor: %w", err)
-	}
-
-	post, err := io.ReadAll(postReader)
-	if err != nil {
-		return fmt.Errorf("failed to read post: %w", err)
-	}
-
-	var activity internal.JSONActivityType
-	err = json.Unmarshal(post, &activity)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal activity: %w", err)
-	}
-
-	switch activity.Type {
-	case "Follow":
-		return p.receiveFollow(c, account, post)
+		return p.receiveInboxFollow(c, account, post)
+	case "Accept":
+		return p.receiveInboxAccept(c, account, post)
 	case "Undo":
-		return p.receiveUndo(c, account, post)
+		return p.receiveInboxUndo(c, account, post)
 	default:
 		return fmt.Errorf("unsupported activity type: %s", activity.Type)
 	}
 }
 
-func (p *Processor) receiveFollow(c context.Context, account *Account, post []byte) error {
-	var follow internal.JSONFollow
+func (p *Processor) receiveInboxFollow(c context.Context, account *Account, post []byte) error {
+	var follow JSONFollow
 	if err := json.Unmarshal(post, &follow); err != nil {
 		return fmt.Errorf("failed to unmarshal follow: %w", err)
 	}
 
-	// TODO: main-keyのownerとactorが一致しているかどうかのチェック
+	// TODO: main-key の owner と actor が一致しているかどうかのチェック
 	followerID := follow.Actor
 
 	follower, err := p.remoteServer.GetActor(c, account, followerID)
@@ -287,9 +275,9 @@ func (p *Processor) receiveFollow(c context.Context, account *Account, post []by
 
 	// TODO: manual accept
 	actorID := p.urlResolver.resolveActorURL(account.ID)
-	accept := internal.JSONLDAccept{
+	accept := JSONLDAccept{
 		Context: []byte(`"https://www.w3.org/ns/activitystreams"`),
-		JSONAccept: internal.JSONAccept{
+		JSONAccept: JSONAccept{
 			Type:   "Accept",
 			ID:     p.urlResolver.resolveActorURL(account.ID) + "/a/" + generateID(), // TODO: 該当URL
 			Actor:  actorID,
@@ -297,30 +285,73 @@ func (p *Processor) receiveFollow(c context.Context, account *Account, post []by
 		},
 	}
 
-	return p.remoteServer.PostInbox(c, account, follower.Inbox, accept)
+	if err := p.remoteServer.PostInbox(c, account, follower.Inbox, accept); err != nil {
+		return fmt.Errorf("failed to post accept: %w", err)
+	}
+
+	return p.followStore.Follow(c, followsID, followerID)
 }
 
-func (p *Processor) receiveUndo(c context.Context, account *Account, post []byte) error {
-	var undo internal.JSONUndo
+func (p *Processor) receiveInboxAccept(c context.Context, account *Account, post []byte) error {
+	var accept JSONAccept
+	if err := json.Unmarshal(post, &accept); err != nil {
+		return fmt.Errorf("failed to unmarshal accept: %w", err)
+	}
+
+	var activity JSONActivityType
+	if err := json.Unmarshal(accept.Object, &activity); err != nil {
+		return fmt.Errorf("failed to unmarshal activity: %w", err)
+	}
+
+	switch activity.Type {
+	case "Follow":
+		return p.receiveInboxAcceptFollow(c, account, accept)
+	default:
+		return fmt.Errorf("unsupported activity type: %s", activity.Type)
+	}
+}
+
+func (p *Processor) receiveInboxAcceptFollow(c context.Context, account *Account, accept JSONAccept) error {
+	var follow JSONFollow
+	if err := json.Unmarshal(accept.Object, &follow); err != nil {
+		return fmt.Errorf("failed to unmarshal follow: %w", err)
+	}
+
+	// TODO: 自分が送った正しい Activity かどうかのチェック
+	followerID := p.urlResolver.resolveActorURL(account.ID)
+	followsID, err := follow.ParseTo()
+	if err != nil {
+		return fmt.Errorf("failed to parse follow to: %w", err)
+	}
+
+	if err := p.followStore.Follow(c, followerID, followsID); err != nil {
+		return fmt.Errorf("failed to follow: %w", err)
+	}
+
+	return nil
+}
+
+func (p *Processor) receiveInboxUndo(c context.Context, account *Account, post []byte) error {
+	var undo JSONUndo
 	if err := json.Unmarshal(post, &undo); err != nil {
 		return fmt.Errorf("failed to unmarshal undo: %w", err)
 	}
 
-	var activity internal.JSONActivityType
+	var activity JSONActivityType
 	if err := json.Unmarshal(undo.Object, &activity); err != nil {
 		return fmt.Errorf("failed to unmarshal activity: %w", err)
 	}
 
 	switch activity.Type {
 	case "Follow":
-		return p.receiveUndoFollow(c, account, undo)
+		return p.receiveInboxUndoFollow(c, account, undo)
 	default:
 		return fmt.Errorf("unsupported activity type: %s", activity.Type)
 	}
 }
 
-func (p *Processor) receiveUndoFollow(c context.Context, account *Account, undo internal.JSONUndo) error {
-	var follow internal.JSONFollow
+func (p *Processor) receiveInboxUndoFollow(c context.Context, account *Account, undo JSONUndo) error {
+	var follow JSONFollow
 	if err := json.Unmarshal(undo.Object, &follow); err != nil {
 		return fmt.Errorf("failed to unmarshal follow: %w", err)
 	}
@@ -334,6 +365,67 @@ func (p *Processor) receiveUndoFollow(c context.Context, account *Account, undo 
 
 	return nil
 }
+
+func (p *Processor) ReceiveOutbox(c context.Context, accountID string, postReader io.Reader) error {
+	return nil
+	// account, err := p.accountStore.Find(c, accountID)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to find actor: %w", err)
+	// }
+
+	// post, err := io.ReadAll(postReader)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to read post: %w", err)
+	// }
+
+	// var activity JSONActivityType
+	// err = json.Unmarshal(post, &activity)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to unmarshal activity: %w", err)
+	// }
+
+	// switch activity.Type {
+	// case "Undo":
+	// 	return p.receiveOutboxUndo(c, account, post)
+	// default:
+	// 	return fmt.Errorf("unsupported activity type: %s", activity.Type)
+	// }
+}
+
+// func (p *Processor) receiveOutboxUndo(c context.Context, account *Account, post []byte) error {
+// 	var undo JSONUndo
+// 	if err := json.Unmarshal(post, &undo); err != nil {
+// 		return fmt.Errorf("failed to unmarshal undo: %w", err)
+// 	}
+
+// 	var activity JSONActivityType
+// 	if err := json.Unmarshal(undo.Object, &activity); err != nil {
+// 		return fmt.Errorf("failed to unmarshal activity: %w", err)
+// 	}
+
+// 	switch activity.Type {
+// 	case "Follow":
+// 		return p.receiveUndoFollow(c, account, undo)
+// 	default:
+// 		return fmt.Errorf("unsupported activity type: %s", activity.Type)
+// 	}
+// }
+
+// func (p *Processor) receiveUndoFollow(c context.Context, account *Account, undo JSONUndo) error {
+// 	var follow JSONFollow
+// 	if err := json.Unmarshal(undo.Object, &follow); err != nil {
+// 		return fmt.Errorf("failed to unmarshal follow: %w", err)
+// 	}
+
+// 	followerID := follow.Actor
+// 	followsID := p.urlResolver.resolveActorURL(account.ID)
+
+// 	if err := p.followStore.Unfollow(c, followerID, followsID); err != nil {
+// 		return fmt.Errorf("failed to unfollow: %w", err)
+// 	}
+
+// 	return nil
+// }
 
 // Follow - フォローを行う
 // accountID はフォローするアカウントのID
@@ -380,9 +472,9 @@ func (p *Processor) followRemote(c context.Context, account *Account, acct *user
 
 	// TODO: アクティビティの保存
 
-	followBody := internal.JSONLDFollow{
+	followBody := JSONLDFollow{
 		Context: []byte(`"https://www.w3.org/ns/activitystreams"`),
-		JSONFollow: internal.JSONFollow{
+		JSONFollow: JSONFollow{
 			Type:   "Follow",
 			ID:     followActivityID,
 			Actor:  followerID,
@@ -403,13 +495,13 @@ func (p *Processor) followRemote(c context.Context, account *Account, acct *user
 }
 
 func (p *Processor) followLocal(c context.Context, account *Account, acct *userAddr) error {
-	actor, err := p.findLocalActor(c, acct)
+	follows, err := p.accountStore.FindByUsername(c, acct.preferredUsername)
 	if err != nil {
-		return fmt.Errorf("failed to find actor: %w", err)
+		return fmt.Errorf("failed to find account: %w", err)
 	}
 
 	followerID := p.urlResolver.resolveActorURL(account.ID)
-	followsID := actor.ID
+	followsID := p.urlResolver.resolveActorURL(follows.ID)
 
 	if err := p.followStore.Follow(c, followerID, followsID); err != nil {
 		return fmt.Errorf("failed to follow: %w", err)
@@ -443,13 +535,13 @@ func (p *Processor) Unfollow(c context.Context, accountID string, acctStr string
 // accountID はフォローするアカウントのID
 // acctStr は user@host の形式で指定する
 func (p *Processor) unfollowLocal(c context.Context, account *Account, acct *userAddr) error {
-	actor, err := p.findLocalActor(c, acct)
+	follows, err := p.accountStore.FindByUsername(c, acct.preferredUsername)
 	if err != nil {
-		return fmt.Errorf("failed to find actor: %w", err)
+		return fmt.Errorf("failed to find account: %w", err)
 	}
 
 	followerID := p.urlResolver.resolveActorURL(account.ID)
-	followsID := actor.ID
+	followsID := p.urlResolver.resolveActorURL(follows.ID)
 
 	if err := p.followStore.Unfollow(c, followerID, followsID); err != nil {
 		return fmt.Errorf("failed to unfollow: %w", err)
@@ -514,7 +606,7 @@ func (p *Processor) findLocalActor(c context.Context, acct *userAddr) (*Actor, e
 // acctStr は user@host の形式で指定する
 // account は nil でも良い
 // 正常終了でユーザーが見つからなかったときは ErrNotFound を返す
-func (p *Processor) findRemoteActor(c context.Context, account *Account, acct *userAddr) (*internal.JSONActor, error) {
+func (p *Processor) findRemoteActor(c context.Context, account *Account, acct *userAddr) (*JSONActor, error) {
 	if account == nil {
 		return nil, ErrNotFound
 	}
@@ -562,7 +654,7 @@ func (p *Processor) createActorFromAccount(account *Account) (*Actor, error) {
 	}, nil
 }
 
-func createActorFromJSON(actor *internal.JSONActor, host string) *Actor {
+func createActorFromJSON(actor *JSONActor, host string) *Actor {
 	return &Actor{
 		ID:        actor.ID,
 		Username:  actor.PreferredUsername,

@@ -34,6 +34,20 @@ func (fc *FollowCreate) SetToID(s string) *FollowCreate {
 	return fc
 }
 
+// SetStatus sets the "status" field.
+func (fc *FollowCreate) SetStatus(i int) *FollowCreate {
+	fc.mutation.SetStatus(i)
+	return fc
+}
+
+// SetNillableStatus sets the "status" field if the given value is not nil.
+func (fc *FollowCreate) SetNillableStatus(i *int) *FollowCreate {
+	if i != nil {
+		fc.SetStatus(*i)
+	}
+	return fc
+}
+
 // SetID sets the "id" field.
 func (fc *FollowCreate) SetID(s string) *FollowCreate {
 	fc.mutation.SetID(s)
@@ -47,6 +61,7 @@ func (fc *FollowCreate) Mutation() *FollowMutation {
 
 // Save creates the Follow in the database.
 func (fc *FollowCreate) Save(ctx context.Context) (*Follow, error) {
+	fc.defaults()
 	return withHooks(ctx, fc.sqlSave, fc.mutation, fc.hooks)
 }
 
@@ -72,6 +87,14 @@ func (fc *FollowCreate) ExecX(ctx context.Context) {
 	}
 }
 
+// defaults sets the default values of the builder before save.
+func (fc *FollowCreate) defaults() {
+	if _, ok := fc.mutation.Status(); !ok {
+		v := follow.DefaultStatus
+		fc.mutation.SetStatus(v)
+	}
+}
+
 // check runs all checks and user-defined validators on the builder.
 func (fc *FollowCreate) check() error {
 	if _, ok := fc.mutation.FromID(); !ok {
@@ -79,6 +102,9 @@ func (fc *FollowCreate) check() error {
 	}
 	if _, ok := fc.mutation.ToID(); !ok {
 		return &ValidationError{Name: "toID", err: errors.New(`ent: missing required field "Follow.toID"`)}
+	}
+	if _, ok := fc.mutation.Status(); !ok {
+		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Follow.status"`)}
 	}
 	return nil
 }
@@ -123,6 +149,10 @@ func (fc *FollowCreate) createSpec() (*Follow, *sqlgraph.CreateSpec) {
 	if value, ok := fc.mutation.ToID(); ok {
 		_spec.SetField(follow.FieldToID, field.TypeString, value)
 		_node.ToID = value
+	}
+	if value, ok := fc.mutation.Status(); ok {
+		_spec.SetField(follow.FieldStatus, field.TypeInt, value)
+		_node.Status = value
 	}
 	return _node, _spec
 }
@@ -175,6 +205,24 @@ type (
 		*sql.UpdateSet
 	}
 )
+
+// SetStatus sets the "status" field.
+func (u *FollowUpsert) SetStatus(v int) *FollowUpsert {
+	u.Set(follow.FieldStatus, v)
+	return u
+}
+
+// UpdateStatus sets the "status" field to the value that was provided on create.
+func (u *FollowUpsert) UpdateStatus() *FollowUpsert {
+	u.SetExcluded(follow.FieldStatus)
+	return u
+}
+
+// AddStatus adds v to the "status" field.
+func (u *FollowUpsert) AddStatus(v int) *FollowUpsert {
+	u.Add(follow.FieldStatus, v)
+	return u
+}
 
 // UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
 // Using this option is equivalent to using:
@@ -230,6 +278,27 @@ func (u *FollowUpsertOne) Update(set func(*FollowUpsert)) *FollowUpsertOne {
 	return u
 }
 
+// SetStatus sets the "status" field.
+func (u *FollowUpsertOne) SetStatus(v int) *FollowUpsertOne {
+	return u.Update(func(s *FollowUpsert) {
+		s.SetStatus(v)
+	})
+}
+
+// AddStatus adds v to the "status" field.
+func (u *FollowUpsertOne) AddStatus(v int) *FollowUpsertOne {
+	return u.Update(func(s *FollowUpsert) {
+		s.AddStatus(v)
+	})
+}
+
+// UpdateStatus sets the "status" field to the value that was provided on create.
+func (u *FollowUpsertOne) UpdateStatus() *FollowUpsertOne {
+	return u.Update(func(s *FollowUpsert) {
+		s.UpdateStatus()
+	})
+}
+
 // Exec executes the query.
 func (u *FollowUpsertOne) Exec(ctx context.Context) error {
 	if len(u.create.conflict) == 0 {
@@ -283,6 +352,7 @@ func (fcb *FollowCreateBulk) Save(ctx context.Context) ([]*Follow, error) {
 	for i := range fcb.builders {
 		func(i int, root context.Context) {
 			builder := fcb.builders[i]
+			builder.defaults()
 			var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
 				mutation, ok := m.(*FollowMutation)
 				if !ok {
@@ -444,6 +514,27 @@ func (u *FollowUpsertBulk) Update(set func(*FollowUpsert)) *FollowUpsertBulk {
 		set(&FollowUpsert{UpdateSet: update})
 	}))
 	return u
+}
+
+// SetStatus sets the "status" field.
+func (u *FollowUpsertBulk) SetStatus(v int) *FollowUpsertBulk {
+	return u.Update(func(s *FollowUpsert) {
+		s.SetStatus(v)
+	})
+}
+
+// AddStatus adds v to the "status" field.
+func (u *FollowUpsertBulk) AddStatus(v int) *FollowUpsertBulk {
+	return u.Update(func(s *FollowUpsert) {
+		s.AddStatus(v)
+	})
+}
+
+// UpdateStatus sets the "status" field to the value that was provided on create.
+func (u *FollowUpsertBulk) UpdateStatus() *FollowUpsertBulk {
+	return u.Update(func(s *FollowUpsert) {
+		s.UpdateStatus()
+	})
 }
 
 // Exec executes the query.

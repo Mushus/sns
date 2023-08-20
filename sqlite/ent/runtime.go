@@ -2,8 +2,19 @@
 
 package ent
 
+import (
+	"github.com/Mushus/activitypub/sqlite/ent/follow"
+	"github.com/Mushus/activitypub/sqlite/ent/schema"
+)
+
 // The init function reads all schema descriptors with runtime code
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	followFields := schema.Follow{}.Fields()
+	_ = followFields
+	// followDescStatus is the schema descriptor for status field.
+	followDescStatus := followFields[3].Descriptor()
+	// follow.DefaultStatus holds the default value on creation for the status field.
+	follow.DefaultStatus = followDescStatus.Default.(int)
 }

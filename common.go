@@ -20,3 +20,35 @@ func ParseConfig() (*Config, error) {
 	}
 	return &cfg, nil
 }
+
+// type Activity struct {
+// 	ID         string `json:"id"`
+// 	ActivityID string `json:"activity_id"`
+// 	JSON       string `json:"json"`
+// }
+
+type FollowStatus int
+
+const (
+	FollowStatusUnknown     FollowStatus = -1
+	FollowStatusFollowing   FollowStatus = 0
+	FollowStatusPending     FollowStatus = 1
+	FollowStatusUnfollowing FollowStatus = 2
+)
+
+func (s FollowStatus) Value() int {
+	return int(s)
+}
+
+func FindFollowStatus(v int) FollowStatus {
+	switch v {
+	case FollowStatusFollowing.Value():
+		return FollowStatusFollowing
+	case FollowStatusPending.Value():
+		return FollowStatusPending
+	case FollowStatusUnfollowing.Value():
+		return FollowStatusUnfollowing
+	default:
+		return FollowStatusUnknown
+	}
+}

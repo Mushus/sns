@@ -11,8 +11,14 @@ type AccountStore interface {
 
 type FollowStore interface {
 	Follow(c context.Context, fromID string, toID string) error
+	RequestFollow(c context.Context, fromID string, toID string) error
 	Unfollow(c context.Context, fromID string, toID string) error
-	IsFollowing(c context.Context, fromID string, toID string) (bool, error)
+	FindFollowStatus(c context.Context, fromID string, toID string) (FollowStatus, error)
 	ListFollowers(c context.Context, id string) ([]string, error)
 	ListFollows(c context.Context, id string) ([]string, error)
 }
+
+// type ActivityStore interface {
+// 	Save(c context.Context, activity *Activity) error
+// 	Find(c context.Context, id string) (*Activity, error)
+// }
